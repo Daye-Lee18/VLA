@@ -1,0 +1,334 @@
+---
+title: "VLA 실험 로드맵 — SeoulDynamics ML Training Engineer"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+    code-copy: true
+---
+
+> **목표직무:** SeoulDynamics — ML Training Engineer
+> **서버:** RTX 2080 Ti (11GB VRAM) · RAM 32GB · `ssh team2@100.66.177.119`
+> **로봇:** myCobot 280 for Arduino (Elephant Robotics) · Raspberry Pi 5 내장 · DC 12V 60W
+> **카메라:** Intel RealSense (Raspberry Pi 5에 USB 연결) · 고정형 top-down
+> **연결:** Port `/dev/ttyJETCOBOT` · Baud `1000000`
+> **venv:** `~/venv/vision` (lerobot 0.5.1, torch 2.10, wandb 설치됨)
+
+---
+
+## 로봇 스펙 요약
+
+| 항목 | 상세 |
+|------|------|
+| 모델 | myCobot 280 for Arduino |
+| 컴퓨트 | Raspberry Pi 5 (내장) |
+| 축수 | 6-DoF |
+| 작동 반경 | 280mm |
+| 페이로드 | 250g |
+| 전원 | DC 12V, 5A, 60W |
+| 통신 | Serial · Port: `/dev/ttyJETCOBOT` · Baud: `1000000` |
+| Python SDK | `pymycobot` (`MyCobot280` 클래스) |
+| 카메라 | Intel RealSense (top-down 고정) |
+| 제조일 | 2025-01-02 |
+
+---
+
+## JD 연결 요약
+
+| SeoulDynamics ML Training Engineer 요건 | 이 실험 커버 여부 |
+|---|---|
+| Imitation Learning (우대) | ✅ ACT / Diffusion Policy = Behavior Cloning |
+| Self-supervised Learning (우대) | ✅ Diffusion Policy = denoising self-supervised |
+| 학습 로그 데이터 기록 | ✅ W&B (wandb 설치됨) |
+| PyTorch 딥러닝 프레임워크 | ✅ |
+| 실제 로봇 실험 | ✅ myCobot 280 직접 사용 |
+
+> **Thesis 연결:** MS thesis의 Diffusion 기반 모션 생성 = Diffusion Policy 구조 동일
+> `[music + keyframe] → Diffusion → joint sequence`
+> `[camera obs] → Diffusion → robot action sequence`
+
+---
+
+## 전체 파일 구조
+
+```
+seoulDynamics/VLA/
+├── vla_roadmap.qmd
+├── lerobot_models.qmd
+├── chores/
+│   └── mycobot_spec.png          ← 로봇 스펙 이미지
+└── scripts/
+    ├── phase2_check_env.py       ← 서버 환경 확인 ✅
+    ├── phase2_baseline.py        ← pre-trained baseline (참고용)
+    ├── phase3_collect.py         ← Raspberry Pi에서 데이터 수집 ✅
+    ├── phase3_convert.py         ← 서버에서 LeRobot 포맷 변환 ✅
+    ├── phase4_train.sh           ← 서버에서 fine-tuning
+    └── phase5_compare.py         ← 서버에서 결과 비교
+```
+
+---
+
+## Phase 0 — 서버 연결 ✅ 완료
+
+```bash
+# Tailscale 로그인 (처음 한 번만)
+tailscale login    # → addineduteam2@gmail.com
+
+tailscale status   # 100.66.177.119 확인
+ssh team2@100.66.177.119   # PW: Addteam2!
+```
+
+---
+
+## Phase 1 — 서버 환경 확인 ✅ 완료
+
+- GPU: RTX 2080 Ti, VRAM 11GB
+- CUDA: 12.0 / torch 2.10.0+cu128
+- venv: `~/venv/vision`
+- lerobot 0.5.1 · wandb 0.24.2 · diffusers 0.35.2 — 모두 설치됨
+
+---
+
+## Phase 2 — myCobot 연결 확인
+
+> **실행 환경: Raspberry Pi 5** (서버 아님)
+
+### Step 2-1 — pymycobot 설치 `[Raspberry Pi bash]`
+
+```bash
+pip install pymycobot pyrealsense2
+
+# 연결 테스트
+python -c "
+from pymycobot.mycobot280 import MyCobot280
+mc = MyCobot280('/dev/ttyJETCOBOT', 1000000)
+mc.thread_lock = True
+print('관절값:', mc.get_angles())
+"
+```
+
+**기대 출력:** `관절값: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]` (또는 현재 각도)
+
+### Step 2-2 — RealSense 카메라 확인 `[Raspberry Pi bash]`
+
+```bash
+python -c "
+import pyrealsense2 as rs
+import numpy as np
+pipeline = rs.pipeline()
+cfg = rs.config()
+cfg.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
+pipeline.start(cfg)
+frames = pipeline.wait_for_frames()
+img = np.asanyarray(frames.get_color_frame().get_data())
+print('frame shape:', img.shape)   # (480, 640, 3)
+pipeline.stop()
+"
+```
+
+### Step 2-3 — 관절 움직임 테스트 `[Raspberry Pi bash]`
+
+```bash
+python -c "
+from pymycobot.mycobot280 import MyCobot280
+import time
+mc = MyCobot280('/dev/ttyJETCOBOT', 1000000)
+mc.send_angles([0, 0, 0, 0, 0, 0], 30)   # 홈 포지션, 속도 30%
+time.sleep(3)
+print('현재 각도:', mc.get_angles())
+"
+```
+
+---
+
+## Phase 3 — 시연 데이터 수집 및 변환
+
+### Step 3-1 — 태스크 설정
+
+**태스크: pick & place** — 블록을 A 위치에서 B 위치로 집어 이동
+
+**데이터 수집 방식: Kinesthetic Teaching**
+```
+1. release_all_servos() → 팔 모터 OFF (손으로 자유롭게 움직임)
+2. 손으로 팔을 움직여 시연 수행
+3. 동시에 10Hz로 카메라 프레임 + 관절값 기록
+4. 종료 후 focus_all_servos() → 모터 ON
+```
+
+### Step 3-2 — 데이터 수집 `[Raspberry Pi bash]`
+
+```bash
+# scripts/ 를 Raspberry Pi로 전송 (처음 한 번)
+scp /Users/dayelee/Documents/GitHub/seoulDynamics/VLA/scripts/phase3_collect.py \
+    pi@<raspberry-pi-ip>:~/
+
+# Raspberry Pi에서 실행
+python phase3_collect.py \
+    --n-episodes 50 \
+    --output-dir ~/data/pickplace
+```
+
+**수집 중 조작:**
+- `Enter` → 모터 OFF + 기록 시작
+- 손으로 pick & place 시연
+- `Enter` → 기록 종료 + 모터 ON + 저장
+
+**저장 구조:**
+```
+~/data/pickplace/
+├── dataset_meta.json
+├── episode_000000/
+│   ├── images.npy        # (T, 480, 640, 3) uint8
+│   ├── joint_states.npy  # (T, 6) float32  — 현재 관절각
+│   ├── actions.npy       # (T, 6) float32  — 다음 타임스텝 관절각
+│   ├── timestamps.npy    # (T,)   float64
+│   └── meta.json
+└── episode_000001/ ...
+```
+
+### Step 3-3 — 서버로 전송 `[Raspberry Pi bash]`
+
+```bash
+scp -r ~/data/pickplace team2@100.66.177.119:~/dev_ws/daye_vla/data/
+```
+
+### Step 3-4 — LeRobot 학습 포맷으로 변환 `[서버 bash]`
+
+```bash
+source ~/venv/vision/bin/activate
+cd ~/dev_ws/daye_vla
+
+# 사전 설치
+pip install datasets imageio[ffmpeg] pyarrow
+
+python scripts/phase3_convert.py \
+    --input-dir  data/pickplace \
+    --output-dir data/mycobot_lerobot
+```
+
+**변환 후 구조 (LeRobot 0.5.1 포맷):**
+```
+data/mycobot_lerobot/
+├── meta_data/
+│   ├── info.json          ← 데이터셋 메타 (fps, shape, feature 정의)
+│   ├── stats.json         ← 정규화용 평균/표준편차
+│   └── episodes.jsonl     ← episode별 frame 수
+├── data/
+│   └── train-00000-of-00001.parquet   ← 전체 프레임 테이블
+└── videos/
+    └── observation.images.top/
+        ├── episode_000000.mp4
+        └── ...
+```
+
+### Step 3-5 — 변환 결과 확인 `[서버 bash]`
+
+```bash
+python -c "
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+ds = LeRobotDataset('data/mycobot_lerobot')
+print('episodes:', ds.num_episodes)
+print('frames  :', len(ds))
+print('features:', list(ds.features.keys()))
+"
+```
+
+---
+
+## Phase 4 — Fine-tuning
+
+> **모델:** ACT 우선 (실제 로봇 데이터에 강함) → 여유 있으면 Diffusion Policy도
+> **예상 시간:** ACT ~2시간, Diffusion ~4시간 (RTX 2080 Ti 기준)
+
+### Step 4-1 — ACT fine-tuning `[서버 bash]` ← **권장**
+
+```bash
+source ~/venv/vision/bin/activate
+cd ~/dev_ws/daye_vla
+
+python -m lerobot.scripts.lerobot_train \
+  --policy.type=act \
+  --dataset.repo_id=data/mycobot_lerobot \
+  --output_dir=outputs/act_mycobot_$(date +%Y%m%d_%H%M) \
+  --training.num_epochs=100 \
+  --wandb.enable=true \
+  --wandb.project=vla_mycobot
+```
+
+### Step 4-2 — Diffusion Policy fine-tuning `[서버 bash]`
+
+```bash
+python -m lerobot.scripts.lerobot_train \
+  --policy.type=diffusion \
+  --dataset.repo_id=data/mycobot_lerobot \
+  --output_dir=outputs/diffusion_mycobot_$(date +%Y%m%d_%H%M) \
+  --training.num_epochs=100 \
+  --wandb.enable=true \
+  --wandb.project=vla_mycobot
+```
+
+### Step 4-3 — 학습 모니터링 `[서버 bash]`
+
+```bash
+tail -f outputs/act_mycobot_*/train.log
+# 또는 wandb.ai 웹 대시보드에서 확인
+```
+
+---
+
+## Phase 5 — 실제 로봇 평가
+
+> **목적:** fine-tuned 모델을 실제 myCobot에서 실행 → 성공률 측정
+
+### Step 5-1 — checkpoint 경로 확인 `[서버 bash]`
+
+```bash
+ls outputs/act_mycobot_*/checkpoints/
+# → last/  best/  가 있어야 함
+```
+
+### Step 5-2 — 평가 실행 `[서버 bash]`
+
+```bash
+python scripts/phase5_compare.py \
+  --checkpoint outputs/act_mycobot_<날짜>/checkpoints/last \
+  --n-episodes 20 \
+  --robot-port /dev/ttyJETCOBOT
+```
+
+### Step 5-3 — 결과 확인 및 로컬로 저장
+
+```bash
+# 서버에서 확인
+cat results/final_report_*.txt
+
+# 로컬로 가져오기 [로컬 맥 터미널]
+scp -r team2@100.66.177.119:~/dev_ws/daye_vla/results \
+    /Users/dayelee/Documents/GitHub/seoulDynamics/VLA/
+```
+
+**이력서 문장 템플릿:**
+```
+Fine-tuned an ACT policy (LeRobot 0.5.1) on 50 real-robot
+demonstrations (myCobot 280, pick-and-place task),
+achieving XX% task success rate with XXms inference latency
+on RTX 2080 Ti.
+```
+
+---
+
+## 진행 로그
+
+| Phase | 상태 | 날짜 | 메모 |
+|---|---|---|---|
+| 0. 서버 연결 | ✅ | 2026-04-22 | Tailscale + SSH 완료 |
+| 1. 서버 환경 확인 | ✅ | 2026-04-22 | lerobot 0.5.1 확인 |
+| 2-1. pymycobot 설치 및 연결 | 🔲 | | Raspberry Pi에서 실행 |
+| 2-2. RealSense 카메라 확인 | 🔲 | | |
+| 2-3. 관절 움직임 테스트 | 🔲 | | |
+| 3-1. 데이터 수집 (50 episodes) | 🔲 | | Raspberry Pi에서 실행 |
+| 3-2. 서버로 scp 전송 | 🔲 | | |
+| 3-3. LeRobot 포맷 변환 | 🔲 | | phase3_convert.py |
+| 4. Fine-tuning | 🔲 | | ACT 우선 |
+| 5. 실제 로봇 평가 | 🔲 | | 성공률: ___% |

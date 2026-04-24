@@ -1,0 +1,152 @@
+---
+title: "LeRobot HuggingFace 모델 목록 정리"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    theme: cosmo
+---
+
+> **출처:** `huggingface.co/lerobot` — 총 38개 모델 (2026-04-22 기준)
+> **현재 프로젝트 사용 모델:** `lerobot/diffusion_pusht`
+
+---
+
+## 모델 계열 한눈에 보기
+
+| 계열 | 개수 | 핵심 특징 | 현재 프로젝트 관련 |
+|------|------|-----------|-------------------|
+| SmolVLA | 7 | 경량 VLA, 엣지 타겟 | — |
+| π0 / Pi0 | 9 | Generalist robot policy (Physical Intelligence) | 업그레이드 후보 |
+| xVLA | 5 | Cross-embodiment (다중 로봇) | — |
+| Diffusion Policy | 2 | Diffusion 기반 행동 생성 | **현재 사용 중** |
+| ACT | 2 | Action Chunking with Transformers | phase4에서 선택 가능 |
+| VQ-BeT | 1 | Vector Quantized Behavior Transformer | — |
+| FAST | 1 | Action tokenizer (다른 모델과 결합) | — |
+| 유틸리티 | 기타 | ResNet, 환경 모델 등 | — |
+
+---
+
+## 계열별 상세
+
+### SmolVLA (`smolvla_*`) — 7개
+
+경량 Vision-Language-Action 모델. "Smol" = 작고 빠름, 엣지 디바이스 타겟.
+
+| 모델 | 태스크/벤치마크 |
+|------|----------------|
+| `smolvla_vlabench` | VLA 벤치마크 범용 |
+| `smolvla_robocasa` | RoboCasa 환경 |
+| `smolvla_robomme` | RoboMiME 환경 |
+| `smolvla_libero_plus` | LIBERO+ 태스크 |
+| `smolvla_metaworld` | MetaWorld 환경 |
+| `smolvla_robotwin` | RoboTwin 환경 |
+| `smolvla_robocebra` | RoboCeBra 환경 |
+| `smolvla_base` | 기본 베이스 |
+
+---
+
+### π0 / Pi0 (`pi0*`, `pi05*`) — 9개
+
+Physical Intelligence(π) 개발. Generalist robot policy — 하나의 모델로 다양한 태스크 수행.
+
+| 모델 | 설명 |
+|------|------|
+| `pi0_base` | π0 기본 모델 |
+| `pi0_libero_base` | LIBERO 환경 특화 |
+| `pi0_libero_finetuned_v044` | LIBERO fine-tuned (v0.4.4) |
+| `pi0_old` | 이전 버전 |
+| `pi05_base` | π0.5 기본 (개선형) |
+| `pi05_libero_base` | π0.5 LIBERO 특화 |
+| `pi05_libero_finetuned_v044` | π0.5 LIBERO fine-tuned |
+| `pi05_libero_finetuned_quantiles_v044` | 분위수 기반 fine-tuned |
+| `pi0fast-base` | 추론 속도 최적화 |
+| `pi0fast-libero` | pi0fast LIBERO 특화 |
+
+---
+
+### xVLA (`xvla-*`) — 5개
+
+Cross-embodiment: 다양한 로봇 몸체에 동일 정책 적용.
+
+| 모델 | 로봇 / 태스크 |
+|------|--------------|
+| `xvla-base` | 기본 베이스 |
+| `xvla-widowx` | WidowX 로봇팔 |
+| `xvla-agibot-world` | AgiBot World |
+| `xvla-google-robot` | Google Robot |
+| `xvla-libero` | LIBERO 태스크 |
+| `xvla-folding` | 옷 접기 태스크 |
+
+---
+
+### Diffusion Policy (`diffusion_*`) — 2개
+
+**현재 프로젝트에서 사용 중.** 관측값 → Denoising diffusion → 행동 시퀀스.
+
+| 모델 | 설명 |
+|------|------|
+| `diffusion_pusht` | pusht 태스크 (T블록 밀기) ← **phase2/phase4에서 사용** |
+| `diffusion_pusht_keypoints` | keypoint 기반 변형 |
+
+```python
+# phase2_baseline.py
+PRETRAINED_ID = "lerobot/diffusion_pusht"
+
+# phase4_train.sh
+--policy.type=diffusion
+```
+
+---
+
+### ACT (`act_aloha_*`) — 2개
+
+Action Chunking with Transformers. ALOHA 실제 로봇 하드웨어용.
+
+| 모델 | 태스크 |
+|------|--------|
+| `act_aloha_sim_insertion_human` | 커넥터 삽입 |
+| `act_aloha_sim_transfer_cube_human` | 블록 이동 |
+
+```bash
+# phase4에서 ACT로 전환하려면:
+bash phase4_train.sh act
+```
+
+---
+
+### VQ-BeT (`vqbet_pusht`) — 1개
+
+Vector Quantized Behavior Transformer. 행동을 VQ 코드북으로 이산화.
+
+---
+
+### FAST (`fast-action-tokenizer`) — 1개
+
+행동 시퀀스를 토큰으로 변환하는 모듈. 단독 사용보다 다른 모델과 결합해서 사용.
+
+---
+
+### 유틸리티 / 기타
+
+| 모델 | 용도 |
+|------|------|
+| `resnet10` | 이미지 feature extractor |
+| `eagle2hg-processor-groot-n1p5` | 멀티모달 이미지 프로세서 |
+| `unitree-g1-mujoco` | Unitree G1 MuJoCo 물리 시뮬레이터 |
+| `dummy-hub-env` | 테스트용 더미 환경 |
+| `cartpole-env` | CartPole 환경 |
+
+---
+
+## 현재 프로젝트 업그레이드 경로
+
+```
+현재: diffusion_pusht      (단순, 빠름, pusht 특화)
+  ↓
+1단계: pi0fast-libero       (더 강력, LIBERO 태스크로 확장)
+  ↓
+2단계: smolvla_base         (경량 VLA, 실제 로봇 배포 고려 시)
+  ↓
+3단계: xvla-base            (다중 로봇 적용 시)
+```
