@@ -99,13 +99,34 @@ ssh team2@100.66.177.119   # PW: Addteam2!
 ```bash
 pip install pymycobot pyrealsense2
 
-# 연결 테스트
-python -c "
+# Step 2-1: 설치 + 연결 확인                                                                              
+python3 -c "                                                                                             
 from pymycobot.mycobot280 import MyCobot280
 mc = MyCobot280('/dev/ttyJETCOBOT', 1000000)
-mc.thread_lock = True
-print('관절값:', mc.get_angles())
-"
+print('관절값:', mc.get_angles())                                                                       
+"                                                                                                       
+                                                                                                        
+# Step 2-2: 카메라 확인      
+# realsense 카메라를 USB로 연결한 후, 아래 코드 실행 → (480, 640, 3) 출력되어야 함.                                                                            
+python -c "     
+import pyrealsense2 as rs, numpy as np
+pipeline = rs.pipeline()              
+cfg = rs.config()                                                                                       
+cfg.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
+pipeline.start(cfg)                                                                                     
+img = np.asanyarray(pipeline.wait_for_frames().get_color_frame().get_data())                            
+print('frame shape:', img.shape)  # (480, 640, 3) 나와야 함                 
+pipeline.stop()                                                                                         
+"                                                                                                       
+                                                                                                        
+# Step 2-3: 관절 움직임 테스트                                                    
+python3 -c "                                                                                             
+from pymycobot.mycobot280 import MyCobot280; import time
+mc = MyCobot280('/dev/ttyJETCOBOT', 1000000)            
+mc.send_angles([0,0,0,0,0,0], 30)                                                                       
+time.sleep(3)                    
+print('현재 각도:', mc.get_angles())                                                                    
+"    
 ```
 
 **기대 출력:** `관절값: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]` (또는 현재 각도)
