@@ -133,6 +133,71 @@ print('현재 각도:', mc.get_angles())
 
 ---
 
+## 모델별 필요 데이터
+
+| 모델 계열 | 이미지 | 관절값 | 언어 명령 | 비고 |
+|-----------|--------|--------|-----------|------|
+| **ACT** | ✅ RGB (top-down) | ✅ 6-DOF 관절 각도 | ❌ | 현재 프로젝트 선택 |
+| **Diffusion Policy** | ✅ RGB | ✅ 관절 각도 | ❌ |  |
+| **π0 / SmolVLA / xVLA** | ✅ RGB | ✅ 관절 각도 | ✅ 텍스트 지시문 필요 | "pick up the red block" 같은 언어 라벨 추가 수집 필요 |
+
+> ACT와 Diffusion Policy는 **이미지 + 관절값**만으로 학습 가능.  
+> π0·SmolVLA 계열(VLA)은 "Vision-Language-Action" — 에피소드마다 텍스트 지시문도 수집해야 함.
+
+---
+
+## 스크립트 실행 시 출력
+
+### `phase3_collect.py` (Raspberry Pi)
+
+```
+~/data/pickplace/
+├── dataset_meta.json          ← 전체 수집 설정 (robot, hz, shape 등)
+├── episode_000000/
+│   ├── images.npy             ← (T, 480, 640, 3) uint8  — RealSense 프레임
+│   ├── joint_states.npy       ← (T, 6) float32          — 현재 관절 각도 (deg)
+│   ├── actions.npy            ← (T, 6) float32          — 1-step ahead 관절 각도
+│   ├── timestamps.npy         ← (T,)   float64          — Unix 타임스탬프
+│   └── meta.json              ← episode별 프레임 수, 수집 시간
+├── episode_000001/
+└── ...
+```
+
+### `phase3_convert.py` (서버)
+
+```
+data/mycobot_lerobot/
+├── meta_data/
+│   ├── info.json              ← 데이터셋 스펙 (fps, shape, feature 정의)
+│   ├── stats.json             ← 정규화용 평균/표준편차 (학습 시 자동 사용)
+│   └── episodes.jsonl         ← episode별 프레임 수 목록
+├── data/
+│   └── train-00000-of-00001.parquet   ← 전체 프레임 테이블 (관절값 + 액션)
+└── videos/
+    └── observation.images.top/
+        ├── episode_000000.mp4 ← LeRobot이 학습 시 프레임 단위로 읽는 영상
+        └── ...
+```
+
+### Phase 4 학습 (`lerobot_train`)
+
+```
+outputs/act_mycobot_YYYYMMDD_HHMM/
+├── checkpoints/
+│   ├── last/                  ← 마지막 epoch 체크포인트
+│   └── best/                  ← validation loss 최저 체크포인트
+└── train.log                  ← 학습 로그 (wandb에도 동시 전송)
+```
+
+### Phase 5 평가 (`phase5_compare.py`)
+
+```
+results/
+└── final_report_YYYYMMDD.txt  ← 성공률, 평균 소요 시간 등
+```
+
+---
+
 ## Phase 3 — 데이터 수집
 
 ### scripts/ 를 Raspberry Pi로 전송

@@ -34,12 +34,12 @@ format:
 | 태스크 | 블록 집어서 이동 → pick & place와 동일 구조 |
 | 액션 공간 | ALOHA 로봇팔 관절 각도 — mycobot280과 구조 동일 (6-DOF) |
 | 학습 데이터 | 실제 로봇팔 시연 데이터 (human demonstration) |
-| Fine-tuning | RealSense 데이터셋으로 바로 적용 가능 |
+| Fine-tuning | RealSense 데이터로 from scratch 학습 — 아키텍처 참고용 |
+| 주의 | ALOHA = 14-DOF (bimanual), mycobot280 = 6-DOF → pretrained weight 직접 이전 불가 |
 
 ```bash
-# phase4_train.sh
+# phase4_train.sh — pretrained 없이 from scratch
 --policy.type=act
---policy.pretrained=lerobot/act_aloha_sim_transfer_cube_human
 --dataset.repo_id=data/mycobot_lerobot
 ```
 

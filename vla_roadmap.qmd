@@ -270,7 +270,6 @@ cd ~/dev_ws/daye_vla
 
 python -m lerobot.scripts.lerobot_train \
   --policy.type=act \
-  --policy.pretrained=lerobot/act_aloha_sim_transfer_cube_human \
   --dataset.repo_id=data/mycobot_lerobot \
   --output_dir=outputs/act_mycobot_$(date +%Y%m%d_%H%M) \
   --training.num_epochs=100 \

@@ -31,7 +31,7 @@ import pyrealsense2 as rs
 
 PORT     = '/dev/ttyJETCOBOT'
 BAUD     = 1000000
-REC_HZ   = 10   # 기록 주기 (Hz) — pick & place는 10Hz로 충분
+REC_HZ   = 30   # 기록 주기 (Hz) — ACT는 빠른 샘플링 필요 (ALOHA 기준 50Hz, Pi5 한계 고려 30Hz)
 IMG_W    = 640
 IMG_H    = 480
 

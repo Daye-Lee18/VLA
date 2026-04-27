@@ -34,7 +34,7 @@ import imageio.v2 as imageio
 from pathlib import Path
 
 
-FPS        = 10
+FPS        = 30
 IMG_H      = 480
 IMG_W      = 640
 STATE_DIM  = 6
