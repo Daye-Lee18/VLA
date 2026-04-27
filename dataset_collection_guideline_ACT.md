@@ -133,7 +133,47 @@
 
 ---
 
-## 9. 수집 후 빠른 검증
+## 9. 레퍼런스 — 이 데이터가 어떻게 생겼는지 보기
+
+우리가 학습할 ACT 모델의 원본 학습 데이터. 수집 전에 영상 보면서 "이 정도 품질로 찍어야 한다" 기준으로 삼을 것.
+
+| 자료 | 링크 | 볼 내용 |
+|------|------|---------|
+| **원본 데이터셋** | [huggingface.co/datasets/lerobot/aloha_sim_transfer_cube_human](https://huggingface.co/datasets/lerobot/aloha_sim_transfer_cube_human) | 에피소드 영상, 관절값 구조 직접 확인 가능 |
+| **모델 데모 GIF** | [act_aloha_sim_transfer_cube_human/demo.gif](https://huggingface.co/lerobot/act_aloha_sim_transfer_cube_human/blob/main/demo.gif) | 학습된 모델이 어떤 동작을 하는지 |
+| **원본 논문** | [arxiv.org/abs/2304.13705](https://arxiv.org/abs/2304.13705) | ACT 아키텍처 및 데이터 수집 방법 상세 |
+| **ALOHA 프로젝트** | [tonyzhaozh.github.io/aloha](https://tonyzhaozh.github.io/aloha/) | 실제 로봇 시연 영상 |
+
+### 영상 보는 법 — LeRobot 시각화 도구
+
+1. [huggingface.co/spaces/lerobot/visualize_dataset](https://huggingface.co/spaces/lerobot/visualize_dataset) 접속
+2. 입력창에 `lerobot/aloha_sim_transfer_cube_human` 입력 후 실행
+3. 에피소드 번호 선택 (0–49) → 해당 에피소드 영상 + 관절값 타임라인 같이 표시됨
+
+> 영상을 보면서 확인할 것:
+> - 시연 속도 (천천히, 부드럽게)
+> - top-down 카메라 앵글
+> - 물체가 항상 프레임 안에 있는지
+> - 동작이 완전히 끝난 뒤 기록 종료됐는지
+
+---
+
+### 원본 데이터셋과 우리 데이터셋 비교
+
+| 항목 | ALOHA (원본) | myCobot 280 (우리) |
+|------|-------------|-------------------|
+| 에피소드 수 | 50개 | 100개 목표 |
+| FPS | 50 Hz | 30 Hz |
+| 관절 수 | 14 (bimanual, 양팔) | 6 (단일 팔) |
+| 카메라 | top-down 1개 | top-down 1개 |
+| 해상도 | 480×640 | 480×640 |
+
+> 원본은 양팔 로봇(bimanual)이라 14-DOF — 우리 mycobot280(6-DOF)과 weight 공유 불가,  
+> 아키텍처(ACT)만 동일하게 가져가고 데이터는 직접 수집해서 from scratch 학습.
+
+---
+
+## 10. 수집 후 빠른 검증
 
 서버 전송 전, Raspberry Pi에서 샘플 확인:
 
