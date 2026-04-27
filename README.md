@@ -2,6 +2,16 @@
 
 목표: myCobot 280 + RealSense로 pick & place 시연 데이터 50개 수집 → 서버(RTX 2080 Ti)에서 ACT policy fine-tuning → 실제 로봇 평가
 
+---
+
+## 파일 안내
+
+| 파일 | 언제 보는가 |
+|------|------------|
+| `README.md` | 실제로 실행할 때 — 커맨드 복붙용 치트시트 |
+| `vla_roadmap.qmd` | 실험 설계 / 배경 이해할 때 — JD 연결, 전체 파이프라인 흐름, 각 Phase 상세 설명, 진행 로그 |
+| `lerobot_models.qmd` | 모델 선택 고민할 때 — 전체 38개 모델 목록, 프로젝트 추천 순위, 모델 교체 근거 |
+
 **서버:** `ssh team2@100.66.177.119` (RTX 2080 Ti, 11GB VRAM)  
 **로봇:** myCobot 280 for Arduino · Raspberry Pi 5 내장  
 **카메라:** Intel RealSense (USB, top-down 고정)  

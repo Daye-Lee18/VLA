@@ -8,122 +8,164 @@ format:
 ---
 
 > **출처:** `huggingface.co/lerobot` — 총 38개 모델 (2026-04-22 기준)
-> **현재 프로젝트 사용 모델:** `lerobot/diffusion_pusht`
+> **프로젝트 조건:** mycobot280 / pick & place / 6-DOF 관절 제어 / RealSense fine-tuning 예정
 
 ---
 
-## 모델 계열 한눈에 보기
+## 모델 선정 기준
 
-| 계열 | 개수 | 핵심 특징 | 현재 프로젝트 관련 |
-|------|------|-----------|-------------------|
-| SmolVLA | 7 | 경량 VLA, 엣지 타겟 | — |
-| π0 / Pi0 | 9 | Generalist robot policy (Physical Intelligence) | 업그레이드 후보 |
-| xVLA | 5 | Cross-embodiment (다중 로봇) | — |
-| Diffusion Policy | 2 | Diffusion 기반 행동 생성 | **현재 사용 중** |
-| ACT | 2 | Action Chunking with Transformers | phase4에서 선택 가능 |
-| VQ-BeT | 1 | Vector Quantized Behavior Transformer | — |
-| FAST | 1 | Action tokenizer (다른 모델과 결합) | — |
-| 유틸리티 | 기타 | ResNet, 환경 모델 등 | — |
+| 기준 | 내용 |
+|------|------|
+| **태스크** | pick & place (물체 집어서 옮기기) |
+| **액션 공간** | 6-DOF 관절 각도 (joint position) |
+| **학습 데이터** | RealSense RGB-D로 직접 수집 → fine-tuning |
+| **하드웨어** | mycobot280 + Raspberry Pi / Jetson |
 
 ---
 
-## 계열별 상세
+## 프로젝트 추천 모델 (우선순위 순)
+
+### ★ 1순위 — `act_aloha_sim_transfer_cube_human`
+
+**가장 조건에 맞는 베이스모델.**
+
+| 항목 | 내용 |
+|------|------|
+| 태스크 | 블록 집어서 이동 → pick & place와 동일 구조 |
+| 액션 공간 | ALOHA 로봇팔 관절 각도 — mycobot280과 구조 동일 (6-DOF) |
+| 학습 데이터 | 실제 로봇팔 시연 데이터 (human demonstration) |
+| Fine-tuning | RealSense 데이터셋으로 바로 적용 가능 |
+
+```bash
+# phase4_train.sh
+--policy.type=act
+--policy.pretrained=lerobot/act_aloha_sim_transfer_cube_human
+--dataset.repo_id=data/mycobot_lerobot
+```
+
+> `act_aloha_sim_insertion_human`은 커넥터 삽입 특화라 pick & place보다 적합도 낮음.
+
+---
+
+### ★ 2순위 — `pi05_base` (또는 `pi0fast-base`)
+
+**Generalist policy — 다양한 manipulation 태스크에 사전학습됨.**
+
+| 항목 | 내용 |
+|------|------|
+| 태스크 | pick & place 포함 다양한 manipulation |
+| 액션 공간 | 범용 (관절 각도 지원) |
+| 학습 데이터 | 대규모 실제 로봇 데모 데이터 |
+| Fine-tuning | 소량 데이터로도 효과적 (generalist 특성) |
+| 추론 속도 | `pi0fast-base` 선택 시 엣지 디바이스에 적합 |
+
+```bash
+--policy.type=pi0
+--policy.pretrained=lerobot/pi05_base
+```
+
+> Jetson/Raspberry Pi 배포 고려 시 `pi0fast-base` 선택.
+
+---
+
+### 3순위 — `smolvla_base`
+
+**경량 VLA — 엣지 배포 우선일 때.**
+
+| 항목 | 내용 |
+|------|------|
+| 태스크 | 범용 (VLA벤치마크 기반) |
+| 액션 공간 | 범용 |
+| 특징 | 모델 크기 작음, 추론 빠름 |
+| 단점 | pick & place 특화 사전학습 없음 → 더 많은 fine-tuning 데이터 필요 |
+
+---
+
+## 모델 계열 전체 목록
 
 ### SmolVLA (`smolvla_*`) — 7개
 
 경량 Vision-Language-Action 모델. "Smol" = 작고 빠름, 엣지 디바이스 타겟.
 
-| 모델 | 태스크/벤치마크 |
-|------|----------------|
-| `smolvla_vlabench` | VLA 벤치마크 범용 |
-| `smolvla_robocasa` | RoboCasa 환경 |
-| `smolvla_robomme` | RoboMiME 환경 |
-| `smolvla_libero_plus` | LIBERO+ 태스크 |
-| `smolvla_metaworld` | MetaWorld 환경 |
-| `smolvla_robotwin` | RoboTwin 환경 |
-| `smolvla_robocebra` | RoboCeBra 환경 |
-| `smolvla_base` | 기본 베이스 |
+| 모델 | 태스크/벤치마크 | 프로젝트 관련 |
+|------|----------------|--------------|
+| `smolvla_base` | 기본 베이스 | 3순위 후보 |
+| `smolvla_vlabench` | VLA 벤치마크 범용 | — |
+| `smolvla_robocasa` | RoboCasa 환경 | — |
+| `smolvla_robomme` | RoboMiME 환경 | — |
+| `smolvla_libero_plus` | LIBERO+ 태스크 | — |
+| `smolvla_metaworld` | MetaWorld 환경 | — |
+| `smolvla_robotwin` | RoboTwin 환경 | — |
 
 ---
 
-### π0 / Pi0 (`pi0*`, `pi05*`) — 9개
+### π0 / Pi0 (`pi0*`, `pi05*`) — 10개
 
 Physical Intelligence(π) 개발. Generalist robot policy — 하나의 모델로 다양한 태스크 수행.
 
-| 모델 | 설명 |
-|------|------|
-| `pi0_base` | π0 기본 모델 |
-| `pi0_libero_base` | LIBERO 환경 특화 |
-| `pi0_libero_finetuned_v044` | LIBERO fine-tuned (v0.4.4) |
-| `pi0_old` | 이전 버전 |
-| `pi05_base` | π0.5 기본 (개선형) |
-| `pi05_libero_base` | π0.5 LIBERO 특화 |
-| `pi05_libero_finetuned_v044` | π0.5 LIBERO fine-tuned |
-| `pi05_libero_finetuned_quantiles_v044` | 분위수 기반 fine-tuned |
-| `pi0fast-base` | 추론 속도 최적화 |
-| `pi0fast-libero` | pi0fast LIBERO 특화 |
+| 모델 | 설명 | 프로젝트 관련 |
+|------|------|--------------|
+| `pi05_base` | π0.5 기본 (개선형) | **2순위 후보** |
+| `pi0fast-base` | 추론 속도 최적화 | **2순위 후보 (엣지 배포 시)** |
+| `pi05_libero_base` | π0.5 LIBERO 특화 | — |
+| `pi05_libero_finetuned_v044` | π0.5 LIBERO fine-tuned | — |
+| `pi05_libero_finetuned_quantiles_v044` | 분위수 기반 fine-tuned | — |
+| `pi0_base` | π0 기본 모델 | — |
+| `pi0_libero_base` | LIBERO 환경 특화 | — |
+| `pi0_libero_finetuned_v044` | LIBERO fine-tuned (v0.4.4) | — |
+| `pi0fast-libero` | pi0fast LIBERO 특화 | — |
+| `pi0_old` | 이전 버전 | — |
 
 ---
 
-### xVLA (`xvla-*`) — 5개
+### xVLA (`xvla-*`) — 6개
 
 Cross-embodiment: 다양한 로봇 몸체에 동일 정책 적용.
 
-| 모델 | 로봇 / 태스크 |
-|------|--------------|
-| `xvla-base` | 기본 베이스 |
-| `xvla-widowx` | WidowX 로봇팔 |
-| `xvla-agibot-world` | AgiBot World |
-| `xvla-google-robot` | Google Robot |
-| `xvla-libero` | LIBERO 태스크 |
-| `xvla-folding` | 옷 접기 태스크 |
-
----
-
-### Diffusion Policy (`diffusion_*`) — 2개
-
-**현재 프로젝트에서 사용 중.** 관측값 → Denoising diffusion → 행동 시퀀스.
-
-| 모델 | 설명 |
-|------|------|
-| `diffusion_pusht` | pusht 태스크 (T블록 밀기) ← **phase2/phase4에서 사용** |
-| `diffusion_pusht_keypoints` | keypoint 기반 변형 |
-
-```python
-# phase2_baseline.py
-PRETRAINED_ID = "lerobot/diffusion_pusht"
-
-# phase4_train.sh
---policy.type=diffusion
-```
+| 모델 | 로봇 / 태스크 | 프로젝트 관련 |
+|------|--------------|--------------|
+| `xvla-base` | 기본 베이스 | mycobot280 cross-embodiment 실험 시 |
+| `xvla-widowx` | WidowX 로봇팔 | — |
+| `xvla-agibot-world` | AgiBot World | — |
+| `xvla-google-robot` | Google Robot | — |
+| `xvla-libero` | LIBERO 태스크 | — |
+| `xvla-folding` | 옷 접기 태스크 | — |
 
 ---
 
 ### ACT (`act_aloha_*`) — 2개
 
-Action Chunking with Transformers. ALOHA 실제 로봇 하드웨어용.
+Action Chunking with Transformers. ALOHA 실제 로봇 하드웨어 demonstration 기반.
 
-| 모델 | 태스크 |
-|------|--------|
-| `act_aloha_sim_insertion_human` | 커넥터 삽입 |
-| `act_aloha_sim_transfer_cube_human` | 블록 이동 |
+| 모델 | 태스크 | 프로젝트 관련 |
+|------|--------|--------------|
+| `act_aloha_sim_transfer_cube_human` | 블록 집어서 이동 | **1순위 후보** |
+| `act_aloha_sim_insertion_human` | 커넥터 삽입 | pick & place와 태스크 다름 |
 
-```bash
-# phase4에서 ACT로 전환하려면:
-bash phase4_train.sh act
-```
+---
+
+### Diffusion Policy (`diffusion_*`) — 2개
+
+관측값 → Denoising diffusion → 행동 시퀀스.
+
+| 모델 | 설명 | 프로젝트 관련 |
+|------|------|--------------|
+| `diffusion_pusht` | 2D T블록 밀기 (pusht 태스크) | **비적합** — 2D 태스크, 관절 제어 아님 |
+| `diffusion_pusht_keypoints` | keypoint 기반 변형 | **비적합** |
+
+> pusht 계열은 2D end-effector 제어 전용 — mycobot280 관절 제어와 액션 공간 불일치.
 
 ---
 
 ### VQ-BeT (`vqbet_pusht`) — 1개
 
-Vector Quantized Behavior Transformer. 행동을 VQ 코드북으로 이산화.
+Vector Quantized Behavior Transformer. pusht 태스크 전용 — **비적합**.
 
 ---
 
 ### FAST (`fast-action-tokenizer`) — 1개
 
-행동 시퀀스를 토큰으로 변환하는 모듈. 단독 사용보다 다른 모델과 결합해서 사용.
+행동 시퀀스를 토큰으로 변환하는 모듈. 단독 사용보다 다른 모델(π0 등)과 결합해서 사용.
 
 ---
 
@@ -139,14 +181,19 @@ Vector Quantized Behavior Transformer. 행동을 VQ 코드북으로 이산화.
 
 ---
 
-## 현재 프로젝트 업그레이드 경로
+## 프로젝트 단계별 모델 경로
 
 ```
-현재: diffusion_pusht      (단순, 빠름, pusht 특화)
-  ↓
-1단계: pi0fast-libero       (더 강력, LIBERO 태스크로 확장)
-  ↓
-2단계: smolvla_base         (경량 VLA, 실제 로봇 배포 고려 시)
-  ↓
-3단계: xvla-base            (다중 로봇 적용 시)
+Phase 4 베이스라인:
+  act_aloha_sim_transfer_cube_human
+  → RealSense 데이터로 fine-tuning
+  → mycobot280 pick & place 검증
+
+성능 부족 시:
+  pi05_base (또는 pi0fast-base)
+  → 소량 fine-tuning으로도 generalization 기대
+
+엣지 배포 최적화 필요 시:
+  smolvla_base
+  → 모델 경량화, 추론 속도 우선
 ```
