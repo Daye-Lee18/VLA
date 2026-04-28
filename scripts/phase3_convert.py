@@ -17,11 +17,13 @@ Phase 3 Convert — 수집 데이터(numpy) → LeRobot 0.5.1 학습 포맷 변�
     │   ├── stats.json       ← 정규화용 평균/표준편차
     │   └── episodes.jsonl   ← episode별 frame 수
     ├── data/
-    │   └── train-00000-of-00001.parquet   ← 전체 프레임 테이블
+    │   └── train-00000-of-00001.parquet
     └── videos/
-        └── observation.images.top/
+        ├── observation.images.top/
+        │   ├── episode_000000.mp4
+        │   └── ...
+        └── observation.images.wrist/
             ├── episode_000000.mp4
-            ├── episode_000001.mp4
             └── ...
 """
 
@@ -34,22 +36,35 @@ import imageio.v2 as imageio
 from pathlib import Path
 
 
-FPS        = 30
-IMG_H      = 480
-IMG_W      = 640
-STATE_DIM  = 6
-ACTION_DIM = 6
+FPS         = 30
+IMG_H       = 480
+IMG_W       = 640
+STATE_DIM   = 6
+ACTION_DIM  = 6
 JOINT_NAMES = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
+
+VIDEO_FEATURE = {
+    "dtype": "video",
+    "shape": [IMG_H, IMG_W, 3],
+    "names": ["height", "width", "channel"],
+    "video_info": {
+        "video.fps":          FPS,
+        "video.codec":        "libx264",
+        "video.pix_fmt":      "yuv420p",
+        "video.is_depth_map": False,
+    },
+}
 
 
 # ── episode 로드 ──────────────────────────────────────────
 
 def load_episode(ep_dir: Path):
-    images       = np.load(ep_dir / "images.npy")        # (T, H, W, 3)
-    joint_states = np.load(ep_dir / "joint_states.npy")  # (T, 6)
-    actions      = np.load(ep_dir / "actions.npy")       # (T, 6)
-    timestamps   = np.load(ep_dir / "timestamps.npy")    # (T,)
-    return images, joint_states, actions, timestamps
+    top_images   = np.load(ep_dir / "images_top.npy")   # (T, H, W, 3)
+    wrist_images = np.load(ep_dir / "images_wrist.npy") # (T, H, W, 3)
+    joint_states = np.load(ep_dir / "joint_states.npy") # (T, 6)
+    actions      = np.load(ep_dir / "actions.npy")      # (T, 6)
+    timestamps   = np.load(ep_dir / "timestamps.npy")   # (T,)
+    return top_images, wrist_images, joint_states, actions, timestamps
 
 
 # ── 영상 저장 ─────────────────────────────────────────────
@@ -57,7 +72,7 @@ def load_episode(ep_dir: Path):
 def save_video(images, video_path: Path, fps=FPS):
     video_path.parent.mkdir(parents=True, exist_ok=True)
     writer = imageio.get_writer(str(video_path), fps=fps, codec="libx264",
-                                 output_params=["-crf", "23", "-pix_fmt", "yuv420p"])
+                                output_params=["-crf", "23", "-pix_fmt", "yuv420p"])
     for frame in images:
         writer.append_data(frame)
     writer.close()
@@ -66,7 +81,7 @@ def save_video(images, video_path: Path, fps=FPS):
 # ── stats 계산 ────────────────────────────────────────────
 
 def compute_stats(all_states, all_actions):
-    states  = np.concatenate(all_states,  axis=0)   # (N_total, 6)
+    states  = np.concatenate(all_states,  axis=0)
     actions = np.concatenate(all_actions, axis=0)
 
     def stat(arr):
@@ -77,15 +92,13 @@ def compute_stats(all_states, all_actions):
             "max":  arr.max(axis=0).tolist(),
         }
 
+    image_stat = {"mean": [0.5, 0.5, 0.5], "std": [0.5, 0.5, 0.5],
+                  "min":  [0.0, 0.0, 0.0], "max": [1.0, 1.0, 1.0]}
     return {
-        "observation.state": stat(states),
-        "action":            stat(actions),
-        "observation.images.top": {   # 영상은 픽셀 정규화 (0~255 → 0~1)
-            "mean": [0.5, 0.5, 0.5],
-            "std":  [0.5, 0.5, 0.5],
-            "min":  [0.0, 0.0, 0.0],
-            "max":  [1.0, 1.0, 1.0],
-        },
+        "observation.state":        stat(states),
+        "action":                   stat(actions),
+        "observation.images.top":   image_stat,
+        "observation.images.wrist": image_stat,
     }
 
 
@@ -93,48 +106,41 @@ def compute_stats(all_states, all_actions):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-dir",  type=str, required=True,
-                        help="phase3_collect.py 출력 디렉토리")
-    parser.add_argument("--output-dir", type=str, required=True,
-                        help="LeRobot 포맷으로 저장할 경로")
+    parser.add_argument("--input-dir",  type=str, required=True)
+    parser.add_argument("--output-dir", type=str, required=True)
     args = parser.parse_args()
 
     input_dir  = Path(args.input_dir).expanduser()
     output_dir = Path(args.output_dir).expanduser()
 
-    # episode 디렉토리 목록
     ep_dirs = sorted(input_dir.glob("episode_*"))
     if not ep_dirs:
         raise FileNotFoundError(f"episode_* 디렉토리가 없습니다: {input_dir}")
     print(f"변환 대상: {len(ep_dirs)} episodes → {output_dir}")
 
-    # 출력 디렉토리 생성
     (output_dir / "meta_data").mkdir(parents=True, exist_ok=True)
     (output_dir / "data").mkdir(parents=True, exist_ok=True)
-    video_dir = output_dir / "videos" / "observation.images.top"
-    video_dir.mkdir(parents=True, exist_ok=True)
+    top_video_dir   = output_dir / "videos" / "observation.images.top"
+    wrist_video_dir = output_dir / "videos" / "observation.images.wrist"
+    top_video_dir.mkdir(parents=True, exist_ok=True)
+    wrist_video_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── 각 episode 처리
-    rows           = []   # parquet 행
-    episodes_meta  = []   # episodes.jsonl
-    all_states     = []
-    all_actions    = []
-    global_idx     = 0
+    rows          = []
+    episodes_meta = []
+    all_states    = []
+    all_actions   = []
+    global_idx    = 0
 
     for ep_idx, ep_dir in enumerate(ep_dirs):
         print(f"  [{ep_idx+1}/{len(ep_dirs)}] {ep_dir.name} ...", end=" ")
 
-        images, states, actions, timestamps = load_episode(ep_dir)
+        top_imgs, wrist_imgs, states, actions, timestamps = load_episode(ep_dir)
         T = len(timestamps)
-
-        # 상대 timestamp (0부터 시작)
         rel_ts = (timestamps - timestamps[0]).astype(np.float32)
 
-        # 영상 저장
-        video_path = video_dir / f"episode_{ep_idx:06d}.mp4"
-        save_video(images, video_path)
+        save_video(top_imgs,   top_video_dir   / f"episode_{ep_idx:06d}.mp4")
+        save_video(wrist_imgs, wrist_video_dir / f"episode_{ep_idx:06d}.mp4")
 
-        # parquet 행 생성
         for f in range(T):
             rows.append({
                 "index":                    global_idx + f,
@@ -157,30 +163,26 @@ def main():
         global_idx += T
         print(f"{T} frames")
 
-    # ── parquet 저장
     table = pa.Table.from_pylist(rows, schema=pa.schema([
-        pa.field("index",              pa.int64()),
-        pa.field("episode_index",      pa.int64()),
-        pa.field("frame_index",        pa.int64()),
-        pa.field("timestamp",          pa.float32()),
-        pa.field("next.done",          pa.bool_()),
-        pa.field("observation.state",  pa.list_(pa.float32())),
-        pa.field("action",             pa.list_(pa.float32())),
+        pa.field("index",             pa.int64()),
+        pa.field("episode_index",     pa.int64()),
+        pa.field("frame_index",       pa.int64()),
+        pa.field("timestamp",         pa.float32()),
+        pa.field("next.done",         pa.bool_()),
+        pa.field("observation.state", pa.list_(pa.float32())),
+        pa.field("action",            pa.list_(pa.float32())),
     ]))
     pq.write_table(table, output_dir / "data" / "train-00000-of-00001.parquet")
     print(f"parquet 저장 완료: {global_idx} frames total")
 
-    # ── stats.json
     stats = compute_stats(all_states, all_actions)
     with open(output_dir / "meta_data" / "stats.json", "w") as f:
         json.dump(stats, f, indent=2)
 
-    # ── episodes.jsonl
     with open(output_dir / "meta_data" / "episodes.jsonl", "w") as f:
         for ep in episodes_meta:
             f.write(json.dumps(ep) + "\n")
 
-    # ── info.json
     info = {
         "codebase_version": "v2.0",
         "robot_type":       "mycobot280_arduino",
@@ -189,17 +191,8 @@ def main():
         "fps":              FPS,
         "video":            True,
         "features": {
-            "observation.images.top": {
-                "dtype": "video",
-                "shape": [IMG_H, IMG_W, 3],
-                "names": ["height", "width", "channel"],
-                "video_info": {
-                    "video.fps":          FPS,
-                    "video.codec":        "libx264",
-                    "video.pix_fmt":      "yuv420p",
-                    "video.is_depth_map": False,
-                },
-            },
+            "observation.images.top":   VIDEO_FEATURE,
+            "observation.images.wrist": VIDEO_FEATURE,
             "observation.state": {
                 "dtype": "float32",
                 "shape": [STATE_DIM],

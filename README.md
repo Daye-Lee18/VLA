@@ -155,7 +155,8 @@ print('현재 각도:', mc.get_angles())
 ~/data/pickplace/
 ├── dataset_meta.json          ← 전체 수집 설정 (robot, hz, shape 등)
 ├── episode_000000/
-│   ├── images.npy             ← (T, 480, 640, 3) uint8  — RealSense 프레임
+│   ├── images_top.npy         ← (T, 480, 640, 3) uint8  — RealSense top-down 프레임
+│   ├── images_wrist.npy       ← (T, 480, 640, 3) uint8  — wrist 카메라 프레임
 │   ├── joint_states.npy       ← (T, 6) float32          — 현재 관절 각도 (deg)
 │   ├── actions.npy            ← (T, 6) float32          — 1-step ahead 관절 각도
 │   ├── timestamps.npy         ← (T,)   float64          — Unix 타임스탬프
@@ -175,8 +176,11 @@ data/mycobot_lerobot/
 ├── data/
 │   └── train-00000-of-00001.parquet   ← 전체 프레임 테이블 (관절값 + 액션)
 └── videos/
-    └── observation.images.top/
-        ├── episode_000000.mp4 ← LeRobot이 학습 시 프레임 단위로 읽는 영상
+    ├── observation.images.top/
+    │   ├── episode_000000.mp4 ← top-down 카메라 영상
+    │   └── ...
+    └── observation.images.wrist/
+        ├── episode_000000.mp4 ← wrist 카메라 영상
         └── ...
 ```
 
@@ -210,12 +214,19 @@ scp scripts/phase3_collect.py pi@<raspberry-pi-ip>:~/
 ### 데이터 수집 (Raspberry Pi)
 
 ```bash
-python phase3_collect.py --n-episodes 50 --output-dir ~/data/pickplace
+# USB 포트 확인
+ls /dev/ttyUSB*    # ttyUSB0, ttyUSB1 두 개 확인
+
+python phase3_collect.py \
+    --n-episodes 100 \
+    --output-dir ~/data/pickplace \
+    --leader-port /dev/ttyUSB0 \
+    --follower-port /dev/ttyUSB1
 ```
 
-- `Enter` → 모터 OFF + 기록 시작
-- 손으로 pick & place 시연
-- `Enter` → 기록 종료 + 저장
+- `Enter` → 리더 모터 OFF + 기록 시작 (팔로워 자동 미러링)
+- 리더팔 손으로 잡고 pick & place 시연 (카메라는 팔로워만 촬영)
+- `Enter` → 기록 종료 + 두 팔 홈 복귀
 
 ### 서버로 전송
 

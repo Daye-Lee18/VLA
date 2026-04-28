@@ -169,39 +169,62 @@ print('현재 각도:', mc.get_angles())
 
 **태스크: pick & place** — 블록을 A 위치에서 B 위치로 집어 이동
 
-**데이터 수집 방식: Kinesthetic Teaching**
+**데이터 수집 방식: Leader-Follower**
 ```
-1. release_all_servos() → 팔 모터 OFF (손으로 자유롭게 움직임)
-2. 손으로 팔을 움직여 시연 수행
-3. 동시에 10Hz로 카메라 프레임 + 관절값 기록
-4. 종료 후 focus_all_servos() → 모터 ON
+리더팔  (/dev/ttyUSB0) — 사람이 손으로 잡고 움직임 (카메라 프레임 밖)
+팔로워팔 (/dev/ttyUSB1) — 리더 각도 실시간 미러링 (카메라가 촬영)
+
+1. 두 팔 홈 포지션 확인
+2. Enter → 리더 모터 OFF, 팔로워 모터 ON
+3. 리더팔 손으로 pick & place 시연
+4. 팔로워팔이 자동 미러링 → 카메라가 팔로워만 촬영 (손 없음)
+5. Enter → 기록 종료 + 두 팔 홈 복귀
+```
+
+**USB 포트 확인 방법:**
+```bash
+ls /dev/ttyUSB*    # ttyUSB0, ttyUSB1 두 개 보여야 함
+
+# 어느 포트가 리더인지 확인: 아래 실행 후 리더팔을 손으로 움직여봄
+python -c "
+from pymycobot.mycobot280 import MyCobot280
+mc = MyCobot280('/dev/ttyUSB0', 1000000)
+import time
+for _ in range(5):
+    print(mc.get_angles())
+    time.sleep(0.5)
+"
+# 각도가 바뀌는 포트 = 리더 (모터 OFF 상태여야 함)
 ```
 
 ### Step 3-2 — 데이터 수집 `[Raspberry Pi bash]`
 
 ```bash
 # scripts/ 를 Raspberry Pi로 전송 (처음 한 번)
-scp /Users/dayelee/Documents/GitHub/seoulDynamics/VLA/scripts/phase3_collect.py \
+scp /Users/dayelee/Documents/GitHub/VLA/scripts/phase3_collect.py \
     pi@<raspberry-pi-ip>:~/
 
 # Raspberry Pi에서 실행
 python phase3_collect.py \
-    --n-episodes 50 \
-    --output-dir ~/data/pickplace
+    --n-episodes 100 \
+    --output-dir ~/data/pickplace \
+    --leader-port /dev/ttyUSB0 \
+    --follower-port /dev/ttyUSB1
 ```
 
 **수집 중 조작:**
-- `Enter` → 모터 OFF + 기록 시작
-- 손으로 pick & place 시연
-- `Enter` → 기록 종료 + 모터 ON + 저장
+- `Enter` → 리더 모터 OFF + 기록 시작 (팔로워는 자동 미러링)
+- 리더팔 손으로 잡고 pick & place 시연
+- `Enter` → 기록 종료 + 두 팔 홈 복귀
 
 **저장 구조:**
 ```
 ~/data/pickplace/
 ├── dataset_meta.json
 ├── episode_000000/
-│   ├── images.npy        # (T, 480, 640, 3) uint8
-│   ├── joint_states.npy  # (T, 6) float32  — 현재 관절각
+│   ├── images_top.npy    # (T, 480, 640, 3) uint8 — top-down 카메라
+│   ├── images_wrist.npy  # (T, 480, 640, 3) uint8 — wrist 카메라
+│   ├── joint_states.npy  # (T, 6) float32  — 팔로워 관절각
 │   ├── actions.npy       # (T, 6) float32  — 다음 타임스텝 관절각
 │   ├── timestamps.npy    # (T,)   float64
 │   └── meta.json
