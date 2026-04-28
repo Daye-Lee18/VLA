@@ -149,7 +149,7 @@ print('현재 각도:', mc.get_angles())
 
 ## 스크립트 실행 시 출력
 
-### `phase3_collect.py` (Raspberry Pi)
+### `phase3_collect.py` (수집 PC — Mac / Linux / Raspberry Pi)
 
 ```
 ~/data/pickplace/
@@ -205,23 +205,26 @@ results/
 
 ## Phase 3 — 데이터 수집
 
-### scripts/ 를 Raspberry Pi로 전송
+### scripts/ 를 수집 PC로 전송
 
 ```bash
+# Raspberry Pi로 전송하는 경우
 scp scripts/phase3_collect.py pi@<raspberry-pi-ip>:~/
+
+# 노트북에서 직접 실행하는 경우 — 전송 불필요
 ```
 
-### 데이터 수집 (Raspberry Pi)
+### 데이터 수집
 
 ```bash
-# USB 포트 확인
-ls /dev/ttyUSB*    # ttyUSB0, ttyUSB1 두 개 확인
-
+# 포트 미지정 → 자동 감지 후 입력 요청 (Mac/Linux 모두 동작)
 python phase3_collect.py \
     --n-episodes 100 \
-    --output-dir ~/data/pickplace \
-    --leader-port /dev/ttyUSB0 \
-    --follower-port /dev/ttyUSB1
+    --output-dir ~/data/pickplace
+
+# 포트 미리 아는 경우 직접 지정
+# Linux:  --leader-port /dev/ttyUSB0   --follower-port /dev/ttyUSB1
+# Mac:    --leader-port /dev/cu.usbserial-XXXX  --follower-port /dev/cu.usbserial-YYYY
 ```
 
 - `Enter` → 리더 모터 OFF + 기록 시작 (팔로워 자동 미러링)

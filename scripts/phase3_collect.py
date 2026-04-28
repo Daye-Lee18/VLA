@@ -2,8 +2,8 @@
 Phase 3 — Leader-Follower 데이터 수집
 
 구조:
-    리더팔  (/dev/ttyUSB0) — 사람이 손으로 잡고 움직임, 카메라 프레임 밖에 위치
-    팔로워팔 (/dev/ttyUSB1) — 리더 각도 실시간 미러링, 카메라가 촬영
+    리더팔  — 사람이 손으로 잡고 움직임, 카메라 프레임 밖에 위치
+    팔로워팔 — 리더 각도 실시간 미러링, 카메라가 촬영
 
 카메라:
     top   : RealSense (팔로워 작업공간 top-down 고정)
@@ -11,12 +11,11 @@ Phase 3 — Leader-Follower 데이터 수집
 
 실행 방법:
     python phase3_collect.py --n-episodes 100 --output-dir ~/data/pickplace
+    # 포트 미지정 시 자동으로 감지된 포트 목록 출력 후 입력 요청
 
-USB 포트 확인:
-    ls /dev/ttyUSB*      # 두 개 보여야 함
-    # 어느 쪽이 어느 팔인지 모르면:
-    python -c "from pymycobot.mycobot280 import MyCobot280; mc=MyCobot280('/dev/ttyUSB0',1000000); print(mc.get_angles())"
-    # 리더팔을 손으로 움직여서 각도가 바뀌는 포트 = 리더
+포트 직접 지정:
+    python phase3_collect.py --leader-port /dev/ttyUSB0 --follower-port /dev/ttyUSB1
+    python phase3_collect.py --leader-port /dev/cu.usbserial-XXXX --follower-port /dev/cu.usbserial-YYYY
 
 서버로 전송:
     scp -r ~/data/pickplace team2@100.66.177.119:~/dev_ws/daye_vla/data/
@@ -31,17 +30,37 @@ from datetime import datetime
 from pathlib import Path
 
 import cv2
+import serial.tools.list_ports
 from pymycobot.mycobot280 import MyCobot280
 import pyrealsense2 as rs
 
-LEADER_PORT   = '/dev/ttyUSB0'
-FOLLOWER_PORT = '/dev/ttyUSB1'
 BAUD          = 1000000
 REC_HZ        = 30
 IMG_W         = 640
 IMG_H         = 480
 WRIST_CAM_IDX = 0    # 팔로워 wrist USB 웹캠 인덱스
 MIRROR_SPEED  = 80   # 팔로워 이동 속도 (0–100), 너무 낮으면 lag 심해짐
+
+
+# ── 포트 자동 감지 ────────────────────────────────────────
+
+def list_serial_ports():
+    ports = sorted(p.device for p in serial.tools.list_ports.comports())
+    return ports
+
+def resolve_port(label, arg_value):
+    """포트가 지정되지 않으면 감지된 목록을 보여주고 직접 입력받음."""
+    if arg_value:
+        return arg_value
+    ports = list_serial_ports()
+    if not ports:
+        raise RuntimeError("연결된 시리얼 포트가 없습니다. USB 연결을 확인하세요.")
+    print(f"\n감지된 시리얼 포트:")
+    for i, p in enumerate(ports):
+        print(f"  [{i}] {p}")
+    print(f"{label} 포트 번호 또는 경로 입력 (예: 0 또는 /dev/ttyUSB0): ", end="")
+    val = input().strip()
+    return ports[int(val)] if val.isdigit() else val
 
 
 # ── top 카메라 (RealSense) ────────────────────────────────
@@ -178,22 +197,27 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-episodes",    type=int, default=100)
     parser.add_argument("--output-dir",    type=str, default="~/data/pickplace")
-    parser.add_argument("--leader-port",   type=str, default=LEADER_PORT)
-    parser.add_argument("--follower-port", type=str, default=FOLLOWER_PORT)
+    parser.add_argument("--leader-port",   type=str, default=None,
+                        help="리더팔 시리얼 포트 (미지정 시 자동 감지)")
+    parser.add_argument("--follower-port", type=str, default=None,
+                        help="팔로워팔 시리얼 포트 (미지정 시 자동 감지)")
     parser.add_argument("--wrist-cam-idx", type=int, default=WRIST_CAM_IDX)
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"리더팔 연결 중... ({args.leader_port})")
-    leader = MyCobot280(args.leader_port, BAUD)
+    leader_port   = resolve_port("리더팔",   args.leader_port)
+    follower_port = resolve_port("팔로워팔", args.follower_port)
+
+    print(f"\n리더팔 연결 중... ({leader_port})")
+    leader = MyCobot280(leader_port, BAUD)
     leader.thread_lock = True
     time.sleep(1)
     print(f"  리더 현재 관절값: {leader.get_angles()}")
 
-    print(f"팔로워팔 연결 중... ({args.follower_port})")
-    follower = MyCobot280(args.follower_port, BAUD)
+    print(f"팔로워팔 연결 중... ({follower_port})")
+    follower = MyCobot280(follower_port, BAUD)
     follower.thread_lock = True
     time.sleep(1)
     print(f"  팔로워 현재 관절값: {follower.get_angles()}")
