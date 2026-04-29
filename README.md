@@ -205,7 +205,44 @@ results/
 
 ## Phase 3 — 데이터 수집
 
-### scripts/ 를 수집 PC로 전송
+> **현재 구성 (분산):**
+> - Raspberry Pi: top 카메라(RealSense) + wrist 카메라 → `camera_server.py` 실행
+> - Ubuntu: 리더팔 + 팔로워팔 → `phase3_collect_distributed.py` 실행
+> - 모든 데이터는 Ubuntu 한 곳에 저장됨
+
+### Step 1 — RPi IP 확인
+
+```bash
+# RPi에서 실행
+hostname -I
+# → 192.168.x.x 형태로 출력됨 (첫 번째 숫자가 IP)
+```
+
+### Step 2 — RPi에 카메라 서버 올리기
+
+```bash
+# Ubuntu → RPi로 스크립트 전송
+scp scripts/camera_server.py pi@<rpi-ip>:~/
+
+# RPi에서 실행
+python camera_server.py
+# → "대기 중 — 포트 5000 (Ubuntu 연결 기다리는 중...)" 출력 후 대기
+```
+
+### Step 3 — Ubuntu에서 수집 실행
+
+```bash
+python scripts/phase3_collect_distributed.py \
+    --rpi-ip <Step 1에서 확인한 RPi IP> \
+    --n-episodes 100 \
+    --output-dir ~/data/pickplace
+# 로봇팔 포트 미지정 시 자동 감지 후 선택
+# → RPi 콘솔에 "연결됨" 출력되면 정상
+```
+
+---
+
+### scripts/ 를 수집 PC로 전송 (단일 PC 구성 시)
 
 ```bash
 # Raspberry Pi로 전송하는 경우
