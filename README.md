@@ -17,10 +17,11 @@
 
 | 스크립트 | 실행 환경 | 설명 |
 |----------|-----------|------|
-| `camera_server.py` | Raspberry Pi | RealSense + wrist 카메라 프레임을 소켓으로 전송 |
+| `web_camera_server.py` | Raspberry Pi | RealSense + wrist 카메라 프레임을 소켓으로 전송 |
 | `camera_viewer.py` | Ubuntu | RPi 카메라 서버에 연결해 실시간으로 모니터에 표시 |
 | `phase3_collect.py` | Raspberry Pi / 단일 PC | Leader-Follower 방식 데이터 수집 (단일 PC 구성) |
 | `phase3_collect_distributed.py` | Ubuntu | 분산 구성 데이터 수집 (카메라는 RPi, 로봇은 Ubuntu) |
+| `check_episode.py` | 수집 PC | 수집된 .npy 파일을 비디오로 재생 + 관절값 그래프 확인 |
 | `phase3_convert.py` | 서버 | 수집 데이터 → LeRobot 포맷 변환 |
 | `phase4_train.sh` | 서버 | ACT fine-tuning 실행 |
 | `phase5_compare.py` | 서버 + 로봇 | 학습된 policy 실제 로봇 평가 |
@@ -220,7 +221,7 @@ results/
 ## Phase 3 — 데이터 수집
 
 > **현재 구성 (분산):**
-> - Raspberry Pi: top 카메라(RealSense) + wrist 카메라 → `camera_server.py` 실행
+> - Raspberry Pi: top 카메라(RealSense) + wrist 카메라 → `web_camera_server.py` 실행
 > - Ubuntu: 리더팔 + 팔로워팔 → `phase3_collect_distributed.py` 실행
 > - 모든 데이터는 Ubuntu 한 곳에 저장됨
 
@@ -236,10 +237,10 @@ hostname -I
 
 ```bash
 # Ubuntu → RPi로 스크립트 전송
-scp scripts/camera_server.py pi@<rpi-ip>:~/
+scp scripts/web_camera_server.py pi@<rpi-ip>:~/
 
 # RPi에서 실행
-python camera_server.py
+python web_camera_server.py
 # → "대기 중 — 포트 5000 (Ubuntu 연결 기다리는 중...)" 출력 후 대기
 ```
 
@@ -260,7 +261,7 @@ python scripts/camera_viewer.py --host <rpi-ip>
 | `s` | 현재 프레임 스크린샷 저장 (`viewer_screenshots/`) |
 | `space` | 일시정지 / 재개 |
 
-> `camera_server.py`가 RPi에서 실행 중이어야 연결 가능.  
+> `web_camera_server.py`가 RPi에서 실행 중이어야 연결 가능.  
 > `camera_viewer.py`와 `phase3_collect_distributed.py`는 동시에 실행하지 말 것 — 둘 다 같은 소켓에 연결을 시도해 충돌 발생.  
 > **모니터링 목적이면** 뷰어만 단독으로 띄우거나, 수집 스크립트 실행 후 로그로 상태 확인 권장.
 
@@ -304,6 +305,29 @@ python phase3_collect.py \
 - `Enter` → 리더 모터 OFF + 기록 시작 (팔로워 자동 미러링)
 - 리더팔 손으로 잡고 pick & place 시연 (카메라는 팔로워만 촬영)
 - `Enter` → 기록 종료 + 두 팔 홈 복귀
+
+### 수집 데이터 확인 (서버 전송 전)
+
+```bash
+# 특정 에피소드 하나 확인
+python scripts/check_episode.py --episode-dir ~/data/pickplace/episode_000000
+
+# 전체 데이터셋 순서대로 확인
+python scripts/check_episode.py --dataset-dir ~/data/pickplace
+
+# 관절값 그래프 없이 영상만 빠르게 확인
+python scripts/check_episode.py --dataset-dir ~/data/pickplace --no-plot
+```
+
+| 키 | 동작 |
+|----|------|
+| `Space` | 일시정지 / 재개 |
+| `→` / `←` | 다음 / 이전 프레임 |
+| `n` | 다음 에피소드 |
+| `s` | 현재 프레임 PNG 저장 |
+| `q` | 종료 |
+
+> top + wrist 화면이 좌우로 나란히 표시됨. 품질 불량 에피소드는 여기서 확인 후 삭제할 것.
 
 ### 서버로 전송
 
