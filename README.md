@@ -13,6 +13,20 @@
 | `lerobot_models.qmd` | 모델 선택 고민할 때 — 전체 38개 모델 목록, 프로젝트 추천 순위, 모델 교체 근거 |
 | `dataset_collection_guideline_ACT.md` | **Phase 3 데이터 수집 직전** — 카메라 세팅, 시연 방법, 주의사항, 품질 체크리스트 |
 
+### scripts/ 안내
+
+| 스크립트 | 실행 환경 | 설명 |
+|----------|-----------|------|
+| `camera_server.py` | Raspberry Pi | RealSense + wrist 카메라 프레임을 소켓으로 전송 |
+| `camera_viewer.py` | Ubuntu | RPi 카메라 서버에 연결해 실시간으로 모니터에 표시 |
+| `phase3_collect.py` | Raspberry Pi / 단일 PC | Leader-Follower 방식 데이터 수집 (단일 PC 구성) |
+| `phase3_collect_distributed.py` | Ubuntu | 분산 구성 데이터 수집 (카메라는 RPi, 로봇은 Ubuntu) |
+| `phase3_convert.py` | 서버 | 수집 데이터 → LeRobot 포맷 변환 |
+| `phase4_train.sh` | 서버 | ACT fine-tuning 실행 |
+| `phase5_compare.py` | 서버 + 로봇 | 학습된 policy 실제 로봇 평가 |
+| `phase2_baseline.py` | Raspberry Pi | Phase 2 기본 연결 확인 |
+| `phase2_check_env.py` | Raspberry Pi | 환경 설정 확인 |
+
 **서버:** `ssh team2@100.66.177.119` (RTX 2080 Ti, 11GB VRAM)  
 **로봇:** myCobot 280 for Arduino · Raspberry Pi 5 내장  
 **카메라:** Intel RealSense (USB, top-down 고정)  
@@ -229,7 +243,30 @@ python camera_server.py
 # → "대기 중 — 포트 5000 (Ubuntu 연결 기다리는 중...)" 출력 후 대기
 ```
 
-### Step 3 — Ubuntu에서 수집 실행
+### Step 3 — (선택) Ubuntu에서 카메라 실시간 모니터링
+
+데이터 수집 중 RealSense + wrist 카메라를 Ubuntu 모니터에서 실시간으로 확인할 수 있음.  
+**별도 터미널**에서 Step 4 실행 전에 미리 띄워둘 것.
+
+```bash
+# Ubuntu에서 실행 (Step 4와 별도 터미널)
+python scripts/camera_viewer.py --host <rpi-ip>
+# 포트 변경 시: --port 5001
+```
+
+| 키 | 동작 |
+|----|------|
+| `q` | 종료 |
+| `s` | 현재 프레임 스크린샷 저장 (`viewer_screenshots/`) |
+| `space` | 일시정지 / 재개 |
+
+> `camera_server.py`가 RPi에서 실행 중이어야 연결 가능.  
+> `camera_viewer.py`와 `phase3_collect_distributed.py`는 동시에 실행하지 말 것 — 둘 다 같은 소켓에 연결을 시도해 충돌 발생.  
+> **모니터링 목적이면** 뷰어만 단독으로 띄우거나, 수집 스크립트 실행 후 로그로 상태 확인 권장.
+
+---
+
+### Step 4 — Ubuntu에서 수집 실행
 
 ```bash
 python scripts/phase3_collect_distributed.py \
